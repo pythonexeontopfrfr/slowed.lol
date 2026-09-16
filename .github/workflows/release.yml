@@ -1,0 +1,117 @@
+# Builds slowed.lol firmware and publishes the artifacts the web installer needs.
+#
+# Output per hardware target (f7 / f18):
+#   flipper-z-<target>-update-<suffix>.tgz  <- what slowed.lol/website uploads to the SD card
+#   flipper-z-<target>-full-<suffix>.dfu    <- full image for qFlipper / DFU recovery
+#   ...plus the usual sdk/elf/bin artifacts.
+#
+# Tag a commit to trigger it:
+#   git tag slowed-001 && git push origin slowed-001
+name: 'Release'
+
+on:
+    push:
+        tags:
+            - 'slowed-*'
+    workflow_dispatch:
+        inputs:
+            suffix:
+                description: 'Version suffix used for artifacts and the release tag'
+                required: true
+                default: 'slowed-dev'
+
+permissions:
+    contents: write
+
+env:
+    FBT_TOOLCHAIN_PATH: ${{ github.workspace }}/.toolchain
+    # Recorded in the firmware version header (shows up in About -> FW Version)
+    WORKFLOW_BRANCH_OR_TAG: ${{ github.ref_name }}
+
+jobs:
+    build:
+        name: 'Build ${{ matrix.target }}'
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - target: f7
+                      hw: 7
+                    - target: f18
+                      hw: 18
+        steps:
+            - name: 'Checkout code'
+              uses: actions/checkout@v4
+              with:
+                  # version.py reads tags/history, submodules are required to build
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: 'Install host dependencies'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y python3 python3-pip git wget unzip xz-utils
+
+            - name: 'Pick the version suffix'
+              id: meta
+              run: |
+                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                      echo "suffix=${{ inputs.suffix }}" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "suffix=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: 'Build firmware and update package'
+              env:
+                  # Dist files become flipper-z-f7-update-<suffix>.tgz etc.
+                  DIST_SUFFIX: ${{ steps.meta.outputs.suffix }}
+              run: |
+                  ./fbt TARGET_HW=${{ matrix.hw }} DEBUG=0 COMPACT=1 copro_dist updater_package
+
+            - name: 'Collect artifacts'
+              working-directory: .
+              run: |
+                  mkdir -p artifacts
+                  cp dist/f${{ matrix.hw }}-*/* artifacts/ || true
+                  ls -la artifacts
+
+            - name: 'Upload artifacts'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: firmware-${{ matrix.target }}-${{ steps.meta.outputs.suffix }}
+                  path: artifacts/*
+                  if-no-files-found: error
+
+    release:
+        name: 'Publish release'
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - name: 'Download all build artifacts'
+              uses: actions/download-artifact@v4
+              with:
+                  path: release-assets
+                  merge-multiple: true
+
+            - name: 'Resolve the release tag'
+              id: meta
+              run: |
+                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                      echo "tag=${{ inputs.suffix }}" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: 'List the files that will be published'
+              run: ls -la release-assets
+
+            - name: 'Create the release and attach artifacts'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ steps.meta.outputs.tag }}
+              run: |
+                  set -e
+                  gh release view "$TAG" >/dev/null 2>&1 || \
+                      gh release create "$TAG" --title "$TAG" --generate-notes
+                  gh release upload "$TAG" release-assets/* --clobber
