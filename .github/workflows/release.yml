@@ -27,6 +27,9 @@ env:
     FBT_TOOLCHAIN_PATH: ${{ github.workspace }}/.toolchain
     # Recorded in the firmware version header (shows up in About -> FW Version)
     WORKFLOW_BRANCH_OR_TAG: ${{ github.ref_name }}
+    # Toolchain download URL (Linux x86_64, GCC 12.3, version 39)
+    # Pattern from the official flipperzero-firmware repo's windows-toolchain-download.ps1
+    TOOLCHAIN_URL: https://update.flipperzero.one/builds/toolchain/gcc-arm-none-eabi-12.3-x86_64-linux-flipper-39.tar.gz
 
 jobs:
     build:
