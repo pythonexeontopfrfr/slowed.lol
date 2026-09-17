@@ -1,6 +1,5 @@
 import itertools
 import re
-import re
 
 from fbt.sdk.cache import LazySdkVersionLoader
 from fbt.version import get_git_commit_unix_timestamp
@@ -113,6 +112,9 @@ lib_targets = env.BuildModules(
 )
 
 # Configure firmware origin definitions
+# FIRMWARE_ORIGIN may contain characters that are illegal in C identifiers
+# (e.g. "slowed.lol"); map them to underscores for the FW_ORIGIN_* macro while
+# keeping the human-readable name elsewhere (About screen reads the plain string).
 env.Append(
     CPPDEFINES=[
         re.sub(r"[^A-Za-z0-9_]", "_", env.subst("FW_ORIGIN_${FIRMWARE_ORIGIN}")),
