@@ -52,6 +52,7 @@ Brewfile.lock.json
 
 # Toolchain
 /toolchain
+/gcc-arm-none-eabi-*
 
 # openocd output file
 openocd.log
