@@ -1,4 +1,6 @@
 import itertools
+import re
+import re
 
 from fbt.sdk.cache import LazySdkVersionLoader
 from fbt.version import get_git_commit_unix_timestamp
@@ -113,7 +115,7 @@ lib_targets = env.BuildModules(
 # Configure firmware origin definitions
 env.Append(
     CPPDEFINES=[
-        env.subst("FW_ORIGIN_${FIRMWARE_ORIGIN}"),
+        re.sub(r"[^A-Za-z0-9_]", "_", env.subst("FW_ORIGIN_${FIRMWARE_ORIGIN}")),
     ]
 )
 
